@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador Congruencial Lineal (LCG)</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Generador Congruencial Lineal (LCG)</h1>
+        
+        <div class="form-section">
+            <div class="form-group">
+                <label for="seed">Semilla (X₀):</label>
+                <input type="number" id="seed" min="0" step="1" placeholder="Ingrese la semilla (≥ 0)">
+            </div>
+            
+            <div class="form-group">
+                <label for="multiplier">Multiplicador (a):</label>
+                <input type="number" id="multiplier" min="0" step="1" placeholder="Ingrese el multiplicador (≥ 0)">
+            </div>
+            
+            <div class="form-group">
+                <label for="increment">Incremento (c):</label>
+                <input type="number" id="increment" min="0" step="1" placeholder="Ingrese el incremento (≥ 0)">
+            </div>
+            
+            <div class="form-group">
+                <label for="modulus">Módulo (m):</label>
+                <input type="number" id="modulus" min="2" step="1" placeholder="Ingrese el módulo (≥ 2)">
+            </div>
+            
+            <div class="form-group">
+                <label for="count">Cantidad de números a generar:</label>
+                <input type="number" id="count" min="1" step="1" placeholder="Ingrese la cantidad (≥ 1)">
+            </div>
+            
+            <div class="form-group">
+                <button id="generateBtn">Generar Números</button>
+                <button id="resetBtn" class="reset">Reiniciar</button>
+            </div>
+            
+            <div id="message"></div>
+        </div>
+        
+        <div class="results-section">
+            <h2>Números Generados</h2>
+            <div class="numbers-container" id="numbersContainer">
+                <!-- Los números generados aparecerán aquí -->
+            </div>
+            
+            <h2>Gráfico de Dispersión</h2>
+            <div class="chart-container">
+                <canvas id="scatterChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de confirmación para más de 100 números -->
+    <div class="modal" id="confirmationModal">
+        <div class="modal-content">
+            <h2>Confirmación</h2>
+            <p>Está intentando generar más de 100 números. ¿Está seguro de que desea continuar?</p>
+            <div class="modal-buttons">
+                <button id="confirmYes">Sí, continuar</button>
+                <button id="confirmNo">No, cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
