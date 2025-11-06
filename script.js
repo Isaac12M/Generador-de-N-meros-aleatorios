@@ -16,6 +16,16 @@ const confirmationModal = document.getElementById('confirmationModal');
 const confirmYesBtn = document.getElementById('confirmYes');
 const confirmNoBtn = document.getElementById('confirmNo');
 
+// FUNCIÓN PARA CALCULAR LA POTENCIA DE 2 MÁS CERCANA
+function calculateModulus(count) {
+    // Encontrar la potencia de 2 más cercana que sea mayor o igual al count
+    let modulus = 2;
+    while (modulus < count) {
+        modulus *= 2;
+    }
+    return modulus;
+}
+
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
     initializeChart();
@@ -26,38 +36,102 @@ document.addEventListener('DOMContentLoaded', function() {
     confirmYesBtn.addEventListener('click', confirmGeneration);
     confirmNoBtn.addEventListener('click', cancelGeneration);
     
-    // Prevenir números negativos en todos los inputs
-    preventNegativeInputs();
+    // Validaciones individuales en tiempo real
+    setupIndividualValidations();
+    
+    // Actualizar módulo automáticamente cuando cambie la cantidad
+    countInput.addEventListener('input', updateModulusFromCount);
 });
 
-// Prevenir que se ingresen números negativos
-function preventNegativeInputs() {
-    const inputs = [seedInput, multiplierInput, incrementInput, modulusInput, countInput];
-    
-    inputs.forEach(input => {
-        // Prevenir entrada de caracteres negativos
-        input.addEventListener('keydown', function(e) {
-            // Prevenir el signo negativo y la letra 'e' (notación científica)
-            if (e.key === '-' || e.key === 'e' || e.key === 'E') {
-                e.preventDefault();
-            }
-        });
-        
-        // Corregir si se pega un valor negativo
-        input.addEventListener('input', function() {
-            if (this.value < 0) {
-                this.value = Math.abs(this.value); // Convertir a positivo
-            }
-        });
-        
-        // Validar cuando pierde el foco
-        input.addEventListener('blur', function() {
-            if (this.value < 0) {
-                this.value = '';
-                showMessage('Se ha eliminado un valor negativo', 'error');
-            }
-        });
+// Configurar validaciones individuales para cada campo
+function setupIndividualValidations() {
+    // Semilla: debe ser ≥ 0
+    seedInput.addEventListener('blur', function() {
+        const value = parseInt(this.value);
+        if (this.value !== '' && (isNaN(value) || value < 0)) {
+            showIndividualError(this, 'La semilla debe ser un número ≥ 0');
+        } else {
+            clearIndividualError(this);
+        }
     });
+    
+    // Multiplicador: debe ser ≥ 0
+    multiplierInput.addEventListener('blur', function() {
+        const value = parseInt(this.value);
+        if (this.value !== '' && (isNaN(value) || value < 0)) {
+            showIndividualError(this, 'El multiplicador debe ser un número ≥ 0');
+        } else {
+            clearIndividualError(this);
+        }
+    });
+    
+    // Incremento: debe ser ≥ 0
+    incrementInput.addEventListener('blur', function() {
+        const value = parseInt(this.value);
+        if (this.value !== '' && (isNaN(value) || value < 0)) {
+            showIndividualError(this, 'El incremento debe ser un número ≥ 0');
+        } else {
+            clearIndividualError(this);
+        }
+    });
+    
+    // Módulo: BLOQUEADO - se calcula automáticamente
+    modulusInput.addEventListener('focus', function() {
+        this.blur(); // Previene que el usuario pueda enfocar el campo
+    });
+    
+    // Cantidad: debe ser ≥ 100
+    countInput.addEventListener('blur', function() {
+        const value = parseInt(this.value);
+        if (this.value !== '' && (isNaN(value) || value < 100)) {
+            showIndividualError(this, 'La cantidad debe ser ≥ 100');
+        } else {
+            clearIndividualError(this);
+        }
+    });
+}
+
+// ACTUALIZAR MÓDULO AUTOMÁTICAMENTE BASADO EN LA CANTIDAD
+function updateModulusFromCount() {
+    const count = parseInt(countInput.value);
+    
+    if (!isNaN(count) && count >= 100) {
+        const modulus = calculateModulus(count);
+        modulusInput.value = modulus;
+        clearIndividualError(modulusInput);
+        
+        // Mostrar información al usuario
+        showMessage(`Módulo actualizado automáticamente a: ${modulus} (2^${Math.log2(modulus)})`, 'info');
+    } else if (countInput.value !== '') {
+        showIndividualError(countInput, 'La cantidad debe ser ≥ 100');
+        modulusInput.value = '';
+    } else {
+        modulusInput.value = '';
+    }
+}
+
+// Mostrar error individual para un campo específico
+function showIndividualError(input, message) {
+    // Remover error anterior si existe
+    clearIndividualError(input);
+    
+    // Crear elemento de error
+    const errorElement = document.createElement('div');
+    errorElement.className = 'field-error';
+    errorElement.textContent = message;
+    
+    // Insertar después del input
+    input.parentNode.appendChild(errorElement);
+    input.classList.add('error-field');
+}
+
+// Limpiar error individual
+function clearIndividualError(input) {
+    const existingError = input.parentNode.querySelector('.field-error');
+    if (existingError) {
+        existingError.remove();
+    }
+    input.classList.remove('error-field');
 }
 
 // Inicializar el gráfico con colores verdes
@@ -148,6 +222,9 @@ function initializeChart() {
 
 // Manejar la generación de números
 function handleGenerate() {
+    // Limpiar todos los errores individuales primero
+    clearAllIndividualErrors();
+    
     // Validar entradas
     if (!validateInputs()) {
         return;
@@ -160,12 +237,18 @@ function handleGenerate() {
     const count = parseInt(countInput.value);
     
     // Verificar si la semilla está en el rango correcto
-    if (seed < 0 || seed >= modulus) {
-        showMessage('Error: La semilla debe cumplir 0 ≤ semilla < módulo', 'error');
+    if (seed < 0) {
+        showIndividualError(seedInput, 'La semilla debe ser un número ≥ 0');
         return;
     }
     
-    // Si se generan más de 100 números, pedir confirmación
+    // Verificar que la cantidad sea al menos 100
+    if (count < 100) {
+        showIndividualError(countInput, 'La cantidad mínima de números a generar es 100');
+        return;
+    }
+    
+    // SIEMPRE pedir confirmación para más de 100 números
     if (count > 100) {
         showConfirmationModal();
     } else {
@@ -173,39 +256,27 @@ function handleGenerate() {
     }
 }
 
+// Limpiar todos los errores individuales
+function clearAllIndividualErrors() {
+    const inputs = [seedInput, multiplierInput, incrementInput, modulusInput, countInput];
+    inputs.forEach(input => clearIndividualError(input));
+}
+
 // Validar las entradas
 function validateInputs() {
+    let isValid = true;
+    
     // Verificar que todos los campos tengan valores
     const inputs = [seedInput, multiplierInput, incrementInput, modulusInput, countInput];
     
     for (let input of inputs) {
         if (input.value === '') {
-            showMessage('Error: Todos los campos deben estar completos', 'error');
-            return false;
-        }
-        
-        const value = parseFloat(input.value);
-        
-        // Verificar si es un número válido y positivo
-        if (isNaN(value) || !Number.isInteger(value) || value < 0) {
-            showMessage('Error: Todos los parámetros deben ser números enteros positivos', 'error');
-            return false;
+            showIndividualError(input, 'Este campo es requerido');
+            isValid = false;
         }
     }
     
-    // Verificar que el módulo sea mayor que 1
-    if (parseInt(modulusInput.value) <= 1) {
-        showMessage('Error: El módulo debe ser mayor que 1', 'error');
-        return false;
-    }
-    
-    // Verificar que la cantidad sea positiva
-    if (parseInt(countInput.value) <= 0) {
-        showMessage('Error: La cantidad debe ser mayor que 0', 'error');
-        return false;
-    }
-    
-    return true;
+    return isValid;
 }
 
 // Mostrar mensaje
@@ -253,8 +324,8 @@ function generateNumbers(seed, multiplier, increment, modulus, count) {
         // Aplicar LCG: Xₖ₊₁ = (a * Xₖ + c) mod m
         x = (multiplier * x + increment) % modulus;
         
-        // Normalizar: uₖ = Xₖ / m
-        const normalized = x / modulus;
+        // Normalizar: uₖ = Xₖ / (m - 1) - SEGÚN TU FÓRMULA
+        const normalized = x / (modulus - 1);
         
         currentNumbers.push({
             index: i + 1,
@@ -266,7 +337,7 @@ function generateNumbers(seed, multiplier, increment, modulus, count) {
     // Mostrar resultados
     displayNumbers();
     updateChart();
-    showMessage(`Se generaron ${count} números aleatorios correctamente`, 'success');
+    showMessage(`Se generaron ${count} números aleatorios (módulo: ${modulus})`, 'success');
 }
 
 // Mostrar números en el contenedor
@@ -300,6 +371,9 @@ function handleReset() {
     incrementInput.value = '';
     modulusInput.value = '';
     countInput.value = '';
+    
+    // Limpiar errores individuales
+    clearAllIndividualErrors();
     
     // Limpiar resultados
     currentNumbers = [];
