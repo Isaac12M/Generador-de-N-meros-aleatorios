@@ -2,139 +2,127 @@
 let currentNumbers = [];
 let scatterChart = null;
 
-// Elementos del DOM
-const seedInput = document.getElementById('seed');
-const multiplierInput = document.getElementById('multiplier');
-const incrementInput = document.getElementById('increment');
-const modulusInput = document.getElementById('modulus');
-const countInput = document.getElementById('count');
-const generateBtn = document.getElementById('generateBtn');
-const resetBtn = document.getElementById('resetBtn');
-const numbersContainer = document.getElementById('numbersContainer');
-const messageDiv = document.getElementById('message');
-const confirmationModal = document.getElementById('confirmationModal');
-const confirmYesBtn = document.getElementById('confirmYes');
-const confirmNoBtn = document.getElementById('confirmNo');
+// Configuración de elementos DOM
+const elements = {
+    seed: document.getElementById('seed'),
+    multiplier: document.getElementById('multiplier'),
+    increment: document.getElementById('increment'),
+    modulus: document.getElementById('modulus'),
+    count: document.getElementById('count'),
+    generateBtn: document.getElementById('generateBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    numbersContainer: document.getElementById('numbersContainer'),
+    messageDiv: document.getElementById('message'),
+    confirmationModal: document.getElementById('confirmationModal'),
+    confirmYes: document.getElementById('confirmYes'),
+    confirmNo: document.getElementById('confirmNo')
+};
 
-// FUNCIÓN PARA CALCULAR LA POTENCIA DE 2 MÁS CERCANA
-function calculateModulus(count) {
-    // Encontrar la potencia de 2 más cercana que sea mayor o igual al count
-    let modulus = 2;
-    while (modulus < count) {
-        modulus *= 2;
+// Utilidades
+const utils = {
+    isPowerOfTwo: n => n > 0 && (n & (n - 1)) === 0,
+    
+    calculateModulus: count => {
+        let modulus = 2;
+        while (modulus < count) modulus *= 2;
+        return modulus;
+    },
+    
+    showMessage: (message, type = 'info') => {
+        elements.messageDiv.textContent = message;
+        elements.messageDiv.className = type;
+        if (type !== 'error') {
+            setTimeout(() => elements.messageDiv.textContent = '', 5000);
+        }
+    },
+    
+    showIndividualError: (input, message) => {
+        utils.clearIndividualError(input);
+        const errorElement = document.createElement('div');
+        errorElement.className = 'field-error';
+        errorElement.textContent = message;
+        input.parentNode.appendChild(errorElement);
+        input.classList.add('error-field');
+    },
+    
+    clearIndividualError: input => {
+        const existingError = input.parentNode.querySelector('.field-error');
+        if (existingError) existingError.remove();
+        input.classList.remove('error-field');
+    },
+    
+    clearAllErrors: () => {
+        Object.values(elements).forEach(element => {
+            if (element && element.tagName === 'INPUT') {
+                utils.clearIndividualError(element);
+            }
+        });
     }
-    return modulus;
-}
+};
 
 // Inicialización
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
     initializeChart();
-    
-    // Event listeners
-    generateBtn.addEventListener('click', handleGenerate);
-    resetBtn.addEventListener('click', handleReset);
-    confirmYesBtn.addEventListener('click', confirmGeneration);
-    confirmNoBtn.addEventListener('click', cancelGeneration);
-    
-    // Validaciones individuales en tiempo real
-    setupIndividualValidations();
-    
-    // Actualizar módulo automáticamente cuando cambie la cantidad
-    countInput.addEventListener('input', updateModulusFromCount);
+    setupEventListeners();
 });
 
-// Configurar validaciones individuales para cada campo
-function setupIndividualValidations() {
-    // Semilla: debe ser ≥ 0
-    seedInput.addEventListener('blur', function() {
-        const value = parseInt(this.value);
-        if (this.value !== '' && (isNaN(value) || value < 0)) {
-            showIndividualError(this, 'La semilla debe ser un número ≥ 0');
-        } else {
-            clearIndividualError(this);
-        }
-    });
+// Configurar event listeners
+function setupEventListeners() {
+    elements.generateBtn.addEventListener('click', handleGenerate);
+    elements.resetBtn.addEventListener('click', handleReset);
+    elements.confirmYes.addEventListener('click', confirmGeneration);
+    elements.confirmNo.addEventListener('click', cancelGeneration);
     
-    // Multiplicador: debe ser ≥ 0
-    multiplierInput.addEventListener('blur', function() {
-        const value = parseInt(this.value);
-        if (this.value !== '' && (isNaN(value) || value < 0)) {
-            showIndividualError(this, 'El multiplicador debe ser un número ≥ 0');
-        } else {
-            clearIndividualError(this);
-        }
-    });
-    
-    // Incremento: debe ser ≥ 0
-    incrementInput.addEventListener('blur', function() {
-        const value = parseInt(this.value);
-        if (this.value !== '' && (isNaN(value) || value < 0)) {
-            showIndividualError(this, 'El incremento debe ser un número ≥ 0');
-        } else {
-            clearIndividualError(this);
-        }
-    });
-    
-    // Módulo: BLOQUEADO - se calcula automáticamente
-    modulusInput.addEventListener('focus', function() {
-        this.blur(); // Previene que el usuario pueda enfocar el campo
-    });
-    
-    // Cantidad: debe ser ≥ 100
-    countInput.addEventListener('blur', function() {
-        const value = parseInt(this.value);
-        if (this.value !== '' && (isNaN(value) || value < 100)) {
-            showIndividualError(this, 'La cantidad debe ser ≥ 100');
-        } else {
-            clearIndividualError(this);
-        }
-    });
+    // Validaciones en tiempo real
+    setupValidations();
 }
 
-// ACTUALIZAR MÓDULO AUTOMÁTICAMENTE BASADO EN LA CANTIDAD
+// Configurar validaciones
+function setupValidations() {
+    const validations = {
+        seed: { min: 0, message: 'La semilla debe ser un número ≥ 0' },
+        multiplier: { min: 0, message: 'El multiplicador debe ser un número ≥ 0' },
+        increment: { min: 0, message: 'El incremento debe ser un número ≥ 0' },
+        count: { min: 100, message: 'La cantidad debe ser ≥ 100' }
+    };
+    
+    Object.entries(validations).forEach(([key, config]) => {
+        elements[key].addEventListener('blur', () => validateField(elements[key], config));
+    });
+    
+    // Módulo bloqueado
+    elements.modulus.addEventListener('focus', () => elements.modulus.blur());
+    elements.count.addEventListener('input', updateModulusFromCount);
+}
+
+// Validar campo individual
+function validateField(input, { min, message }) {
+    const value = parseInt(input.value);
+    if (input.value !== '' && (isNaN(value) || value < min)) {
+        utils.showIndividualError(input, message);
+    } else {
+        utils.clearIndividualError(input);
+    }
+}
+
+// Actualizar módulo automáticamente
 function updateModulusFromCount() {
-    const count = parseInt(countInput.value);
+    const count = parseInt(elements.count.value);
     
     if (!isNaN(count) && count >= 100) {
-        const modulus = calculateModulus(count);
-        modulusInput.value = modulus;
-        clearIndividualError(modulusInput);
-        
-        // Mostrar información al usuario
-        showMessage(`Módulo actualizado automáticamente a: ${modulus} (2^${Math.log2(modulus)})`, 'info');
-    } else if (countInput.value !== '') {
-        showIndividualError(countInput, 'La cantidad debe ser ≥ 100');
-        modulusInput.value = '';
+        const modulus = utils.calculateModulus(count);
+        elements.modulus.value = modulus;
+        utils.clearIndividualError(elements.modulus);
+        utils.showMessage(`Módulo actualizado automáticamente a: ${modulus} (2^${Math.log2(modulus)})`, 'info');
+    } else if (elements.count.value !== '') {
+        utils.showIndividualError(elements.count, 'La cantidad debe ser ≥ 100');
+        elements.modulus.value = '';
     } else {
-        modulusInput.value = '';
+        elements.modulus.value = '';
     }
 }
 
-// Mostrar error individual para un campo específico
-function showIndividualError(input, message) {
-    // Remover error anterior si existe
-    clearIndividualError(input);
-    
-    // Crear elemento de error
-    const errorElement = document.createElement('div');
-    errorElement.className = 'field-error';
-    errorElement.textContent = message;
-    
-    // Insertar después del input
-    input.parentNode.appendChild(errorElement);
-    input.classList.add('error-field');
-}
-
-// Limpiar error individual
-function clearIndividualError(input) {
-    const existingError = input.parentNode.querySelector('.field-error');
-    if (existingError) {
-        existingError.remove();
-    }
-    input.classList.remove('error-field');
-}
-
-// Inicializar el gráfico con colores verdes
+// Inicializar gráfico
 function initializeChart() {
     const ctx = document.getElementById('scatterChart').getContext('2d');
     scatterChart = new Chart(ctx, {
@@ -155,42 +143,13 @@ function initializeChart() {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Índice',
-                        color: '#2e7d32',
-                        font: {
-                            weight: 'bold',
-                            size: 14
-                        }
-                    },
-                    min: 0,
-                    grid: {
-                        color: 'rgba(76, 175, 80, 0.1)'
-                    },
-                    ticks: {
-                        color: '#1b5e20'
-                    }
+                x: { 
+                    title: { display: true, text: 'Índice', color: '#2e7d32', font: { weight: 'bold', size: 14 } },
+                    min: 0, grid: { color: 'rgba(76, 175, 80, 0.1)' }, ticks: { color: '#1b5e20' }
                 },
                 y: {
-                    title: {
-                        display: true,
-                        text: 'Valor Normalizado',
-                        color: '#2e7d32',
-                        font: {
-                            weight: 'bold',
-                            size: 14
-                        }
-                    },
-                    min: 0,
-                    max: 1,
-                    grid: {
-                        color: 'rgba(76, 175, 80, 0.1)'
-                    },
-                    ticks: {
-                        color: '#1b5e20'
-                    }
+                    title: { display: true, text: 'Valor Normalizado', color: '#2e7d32', font: { weight: 'bold', size: 14 } },
+                    min: 0, max: 1, grid: { color: 'rgba(76, 175, 80, 0.1)' }, ticks: { color: '#1b5e20' }
                 }
             },
             plugins: {
@@ -198,190 +157,125 @@ function initializeChart() {
                     display: true,
                     text: 'Distribución de Números Aleatorios Generados',
                     color: '#2e7d32',
-                    font: {
-                        size: 16,
-                        weight: 'bold'
-                    },
-                    padding: {
-                        bottom: 20
-                    }
+                    font: { size: 16, weight: 'bold' },
+                    padding: { bottom: 20 }
                 },
                 legend: {
-                    labels: {
-                        color: '#1b5e20',
-                        font: {
-                            size: 14,
-                            weight: 'bold'
-                        }
-                    }
+                    labels: { color: '#1b5e20', font: { size: 14, weight: 'bold' } }
                 }
             }
         }
     });
 }
 
-// Manejar la generación de números
+// Manejar generación
 function handleGenerate() {
-    // Limpiar todos los errores individuales primero
-    clearAllIndividualErrors();
+    utils.clearAllErrors();
     
-    // Validar entradas
-    if (!validateInputs()) {
-        return;
-    }
+    if (!validateInputs()) return;
     
-    const seed = parseInt(seedInput.value);
-    const multiplier = parseInt(multiplierInput.value);
-    const increment = parseInt(incrementInput.value);
-    const modulus = parseInt(modulusInput.value);
-    const count = parseInt(countInput.value);
+    const seed = parseInt(elements.seed.value);
+    const multiplier = parseInt(elements.multiplier.value);
+    const increment = parseInt(elements.increment.value);
+    const modulus = parseInt(elements.modulus.value);
+    const count = parseInt(elements.count.value);
     
-    // Verificar si la semilla está en el rango correcto
     if (seed < 0) {
-        showIndividualError(seedInput, 'La semilla debe ser un número ≥ 0');
+        utils.showIndividualError(elements.seed, 'La semilla debe ser un número ≥ 0');
         return;
     }
     
-    // Verificar que la cantidad sea al menos 100
     if (count < 100) {
-        showIndividualError(countInput, 'La cantidad mínima de números a generar es 100');
+        utils.showIndividualError(elements.count, 'La cantidad mínima de números a generar es 100');
         return;
     }
     
-    // SIEMPRE pedir confirmación para más de 100 números
-    if (count > 100) {
-        showConfirmationModal();
-    } else {
-        generateNumbers(seed, multiplier, increment, modulus, count);
-    }
+    count > 100 ? showConfirmationModal() : generateNumbers(seed, multiplier, increment, modulus, count);
 }
 
-// Limpiar todos los errores individuales
-function clearAllIndividualErrors() {
-    const inputs = [seedInput, multiplierInput, incrementInput, modulusInput, countInput];
-    inputs.forEach(input => clearIndividualError(input));
-}
-
-// Validar las entradas
+// Validar entradas
 function validateInputs() {
     let isValid = true;
     
-    // Verificar que todos los campos tengan valores
-    const inputs = [seedInput, multiplierInput, incrementInput, modulusInput, countInput];
-    
-    for (let input of inputs) {
-        if (input.value === '') {
-            showIndividualError(input, 'Este campo es requerido');
+    Object.values(elements).forEach(element => {
+        if (element && element.tagName === 'INPUT' && element.value === '') {
+            utils.showIndividualError(element, 'Este campo es requerido');
             isValid = false;
         }
-    }
+    });
     
     return isValid;
 }
 
-// Mostrar mensaje
-function showMessage(message, type) {
-    messageDiv.textContent = message;
-    messageDiv.className = type;
-    
-    // Auto-ocultar mensajes después de 5 segundos (excepto errores críticos)
-    if (type !== 'error' || !message.includes('Error:')) {
-        setTimeout(() => {
-            messageDiv.textContent = '';
-            messageDiv.className = '';
-        }, 5000);
-    }
-}
-
-// Mostrar modal de confirmación
+// Modal de confirmación
 function showConfirmationModal() {
-    confirmationModal.style.display = 'flex';
+    elements.confirmationModal.style.display = 'flex';
 }
 
-// Confirmar generación
 function confirmGeneration() {
-    confirmationModal.style.display = 'none';
-    const seed = parseInt(seedInput.value);
-    const multiplier = parseInt(multiplierInput.value);
-    const increment = parseInt(incrementInput.value);
-    const modulus = parseInt(modulusInput.value);
-    const count = parseInt(countInput.value);
+    elements.confirmationModal.style.display = 'none';
+    const seed = parseInt(elements.seed.value);
+    const multiplier = parseInt(elements.multiplier.value);
+    const increment = parseInt(elements.increment.value);
+    const modulus = parseInt(elements.modulus.value);
+    const count = parseInt(elements.count.value);
     generateNumbers(seed, multiplier, increment, modulus, count);
 }
 
-// Cancelar generación
 function cancelGeneration() {
-    confirmationModal.style.display = 'none';
-    showMessage('Generación cancelada', 'error');
+    elements.confirmationModal.style.display = 'none';
+    utils.showMessage('Generación cancelada', 'error');
 }
 
-// Generar números usando LCG
+// Generar números
 function generateNumbers(seed, multiplier, increment, modulus, count) {
     currentNumbers = [];
     let x = seed;
     
     for (let i = 0; i < count; i++) {
-        // Aplicar LCG: Xₖ₊₁ = (a * Xₖ + c) mod m
         x = (multiplier * x + increment) % modulus;
-        
-        // Normalizar: uₖ = Xₖ / (m - 1) - SEGÚN TU FÓRMULA
-        const normalized = x / (modulus - 1);
-        
         currentNumbers.push({
             index: i + 1,
             value: x,
-            normalized: normalized
+            normalized: x / (modulus - 1)
         });
     }
     
-    // Mostrar resultados
     displayNumbers();
     updateChart();
-    showMessage(`Se generaron ${count} números aleatorios (módulo: ${modulus})`, 'success');
+    utils.showMessage(`Se generaron ${count} números aleatorios (módulo: ${modulus})`, 'success');
 }
 
-// Mostrar números en el contenedor
+// Mostrar números
 function displayNumbers() {
-    numbersContainer.innerHTML = '';
-    
+    elements.numbersContainer.innerHTML = '';
     currentNumbers.forEach(num => {
         const numberItem = document.createElement('div');
         numberItem.className = 'number-item';
         numberItem.textContent = num.normalized.toFixed(4);
-        numbersContainer.appendChild(numberItem);
+        elements.numbersContainer.appendChild(numberItem);
     });
 }
 
-// Actualizar el gráfico
+// Actualizar gráfico
 function updateChart() {
-    const dataPoints = currentNumbers.map(num => ({
+    scatterChart.data.datasets[0].data = currentNumbers.map(num => ({
         x: num.index,
         y: num.normalized
     }));
-    
-    scatterChart.data.datasets[0].data = dataPoints;
     scatterChart.update();
 }
 
-// Manejar el reinicio
+// Reiniciar
 function handleReset() {
-    // Limpiar todos los campos (dejarlos en blanco)
-    seedInput.value = '';
-    multiplierInput.value = '';
-    incrementInput.value = '';
-    modulusInput.value = '';
-    countInput.value = '';
+    Object.values(elements).forEach(element => {
+        if (element && element.tagName === 'INPUT') element.value = '';
+    });
     
-    // Limpiar errores individuales
-    clearAllIndividualErrors();
-    
-    // Limpiar resultados
+    utils.clearAllErrors();
     currentNumbers = [];
-    numbersContainer.innerHTML = '';
+    elements.numbersContainer.innerHTML = '';
     scatterChart.data.datasets[0].data = [];
     scatterChart.update();
-    
-    // Limpiar mensajes
-    messageDiv.textContent = '';
-    messageDiv.className = '';
+    elements.messageDiv.textContent = '';
 }
