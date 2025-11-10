@@ -1,8 +1,4 @@
-// Variables globales
-let currentNumbers = [];
-let scatterChart = null;
-
-// Configuración de elementos DOM
+// Elementos DOM
 const elements = {
     seed: document.getElementById('seed'),
     multiplier: document.getElementById('multiplier'),
@@ -11,200 +7,291 @@ const elements = {
     count: document.getElementById('count'),
     generateBtn: document.getElementById('generateBtn'),
     resetBtn: document.getElementById('resetBtn'),
+    regenerateBtn: document.getElementById('regenerateBtn'),
     numbersContainer: document.getElementById('numbersContainer'),
+    validationSection: document.getElementById('validationSection'),
     messageDiv: document.getElementById('message'),
     confirmationModal: document.getElementById('confirmationModal'),
     confirmYes: document.getElementById('confirmYes'),
     confirmNo: document.getElementById('confirmNo')
 };
 
-// Utilidades
-const utils = {
-    isPowerOfTwo: n => n > 0 && (n & (n - 1)) === 0,
-    
-    calculateModulus: count => {
-        let modulus = 2;
-        while (modulus < count) modulus *= 2;
-        return modulus;
-    },
-    
-    showMessage: (message, type = 'info') => {
-        elements.messageDiv.textContent = message;
-        elements.messageDiv.className = type;
-        if (type !== 'error') {
-            setTimeout(() => elements.messageDiv.textContent = '', 5000);
-        }
-    },
-    
-    showIndividualError: (input, message) => {
-        utils.clearIndividualError(input);
-        const errorElement = document.createElement('div');
-        errorElement.className = 'field-error';
-        errorElement.textContent = message;
-        input.parentNode.appendChild(errorElement);
-        input.classList.add('error-field');
-    },
-    
-    clearIndividualError: input => {
-        const existingError = input.parentNode.querySelector('.field-error');
-        if (existingError) existingError.remove();
-        input.classList.remove('error-field');
-    },
-    
-    clearAllErrors: () => {
-        Object.values(elements).forEach(element => {
-            if (element && element.tagName === 'INPUT') {
-                utils.clearIndividualError(element);
-            }
-        });
-    }
+// Variables globales
+let currentNumbers = [];
+let scatterChart = null;
+let correlationChart = null;
+
+// Configuración
+const CONFIG = {
+    alpha: 0.05,
+    z_alpha_2: 1.96
 };
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
-    initializeChart();
+    initializeCharts();
     setupEventListeners();
 });
 
-// Configurar event listeners
+// Configurar eventos
 function setupEventListeners() {
     elements.generateBtn.addEventListener('click', handleGenerate);
     elements.resetBtn.addEventListener('click', handleReset);
+    elements.regenerateBtn.addEventListener('click', handleRegenerate);
     elements.confirmYes.addEventListener('click', confirmGeneration);
     elements.confirmNo.addEventListener('click', cancelGeneration);
     
-    // Validaciones en tiempo real
-    setupValidations();
-}
-
-// Configurar validaciones
-function setupValidations() {
-    const validations = {
-        seed: { min: 0, message: 'La semilla debe ser un número ≥ 0' },
-        multiplier: { min: 0, message: 'El multiplicador debe ser un número ≥ 0' },
-        increment: { min: 0, message: 'El incremento debe ser un número ≥ 0' },
-        count: { min: 100, message: 'La cantidad debe ser ≥ 100' }
-    };
-    
-    Object.entries(validations).forEach(([key, config]) => {
-        elements[key].addEventListener('blur', () => validateField(elements[key], config));
-    });
-    
-    // Módulo bloqueado
-    elements.modulus.addEventListener('focus', () => elements.modulus.blur());
     elements.count.addEventListener('input', updateModulusFromCount);
+    elements.modulus.addEventListener('focus', () => elements.modulus.blur());
 }
 
-// Validar campo individual
-function validateField(input, { min, message }) {
-    const value = parseInt(input.value);
-    if (input.value !== '' && (isNaN(value) || value < min)) {
-        utils.showIndividualError(input, message);
-    } else {
-        utils.clearIndividualError(input);
-    }
+// Inicializar gráficos
+function initializeCharts() {
+    scatterChart = new Chart(document.getElementById('scatterChart'), {
+        type: 'scatter',
+        data: { datasets: [{
+            label: 'Números Aleatorios',
+            data: [],
+            backgroundColor: 'rgba(76, 175, 80, 0.7)',
+            pointRadius: 6
+        }]},
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: 'Índice' }, min: 0 },
+                y: { title: { display: true, text: 'Valor Normalizado' }, min: 0, max: 1 }
+            }
+        }
+    });
+
+    correlationChart = new Chart(document.getElementById('correlationChart'), {
+        type: 'scatter',
+        data: { datasets: [{
+            label: 'Correlación',
+            data: [],
+            backgroundColor: 'rgba(33, 150, 243, 0.7)',
+            pointRadius: 4
+        }]},
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: 'X_i' }, min: 0, max: 1 },
+                y: { title: { display: true, text: 'X_{i+1}' }, min: 0, max: 1 }
+            }
+        }
+    });
 }
 
 // Actualizar módulo automáticamente
 function updateModulusFromCount() {
     const count = parseInt(elements.count.value);
-    
     if (!isNaN(count) && count >= 100) {
-        const modulus = utils.calculateModulus(count);
+        let modulus = 2;
+        while (modulus < count) modulus *= 2;
         elements.modulus.value = modulus;
-        utils.clearIndividualError(elements.modulus);
-        utils.showMessage(`Módulo actualizado automáticamente a: ${modulus} (2^${Math.log2(modulus)})`, 'info');
-    } else if (elements.count.value !== '') {
-        utils.showIndividualError(elements.count, 'La cantidad debe ser ≥ 100');
-        elements.modulus.value = '';
-    } else {
-        elements.modulus.value = '';
+        showMessage(`Módulo actualizado: ${modulus}`, 'info');
     }
 }
 
-// Inicializar gráfico
-function initializeChart() {
-    const ctx = document.getElementById('scatterChart').getContext('2d');
-    scatterChart = new Chart(ctx, {
-        type: 'scatter',
-        data: {
-            datasets: [{
-                label: 'Números Aleatorios',
-                data: [],
-                backgroundColor: 'rgba(76, 175, 80, 0.7)',
-                borderColor: 'rgba(56, 142, 60, 1)',
-                pointRadius: 6,
-                pointHoverRadius: 8,
-                pointBorderWidth: 2,
-                pointBorderColor: '#1b5e20'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { 
-                    title: { display: true, text: 'Índice', color: '#2e7d32', font: { weight: 'bold', size: 14 } },
-                    min: 0, grid: { color: 'rgba(76, 175, 80, 0.1)' }, ticks: { color: '#1b5e20' }
-                },
-                y: {
-                    title: { display: true, text: 'Valor Normalizado', color: '#2e7d32', font: { weight: 'bold', size: 14 } },
-                    min: 0, max: 1, grid: { color: 'rgba(76, 175, 80, 0.1)' }, ticks: { color: '#1b5e20' }
-                }
-            },
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Distribución de Números Aleatorios Generados',
-                    color: '#2e7d32',
-                    font: { size: 16, weight: 'bold' },
-                    padding: { bottom: 20 }
-                },
-                legend: {
-                    labels: { color: '#1b5e20', font: { size: 14, weight: 'bold' } }
-                }
-            }
-        }
+// Mostrar mensaje
+function showMessage(message, type = 'info') {
+    elements.messageDiv.textContent = message;
+    elements.messageDiv.className = type;
+    if (type !== 'error') setTimeout(() => elements.messageDiv.textContent = '', 5000);
+}
+
+// Generar números
+function generateNumbers(seed, multiplier, increment, modulus, count) {
+    currentNumbers = [];
+    let x = seed;
+    
+    for (let i = 0; i < count; i++) {
+        x = (multiplier * x + increment) % modulus;
+        currentNumbers.push({
+            index: i + 1,
+            value: x,
+            normalized: x / (modulus - 1)
+        });
+    }
+    
+    displayNumbers();
+    updateCharts();
+    runValidationTests();
+}
+
+// Mostrar números
+function displayNumbers() {
+    elements.numbersContainer.innerHTML = '';
+    currentNumbers.forEach(num => {
+        const div = document.createElement('div');
+        div.className = 'number-item';
+        div.textContent = num.normalized.toFixed(4);
+        elements.numbersContainer.appendChild(div);
     });
+}
+
+// Actualizar gráficos
+function updateCharts() {
+    scatterChart.data.datasets[0].data = currentNumbers.map(num => ({
+        x: num.index,
+        y: num.normalized
+    }));
+    scatterChart.update();
+
+    const correlationData = [];
+    for (let i = 0; i < currentNumbers.length - 1; i++) {
+        correlationData.push({
+            x: currentNumbers[i].normalized,
+            y: currentNumbers[i + 1].normalized
+        });
+    }
+    correlationChart.data.datasets[0].data = correlationData;
+    correlationChart.update();
+}
+
+// Pruebas de validación
+function runValidationTests() {
+    const tests = [
+        testUniformityMean(),
+        testUniformityVariance(),
+        testIndependence()
+    ];
+    
+    displayValidationResults(tests);
+}
+
+function testUniformityMean() {
+    const n = currentNumbers.length;
+    const mean = currentNumbers.reduce((sum, num) => sum + num.normalized, 0) / n;
+    const lowerLimit = 0.5 - CONFIG.z_alpha_2 * (1 / Math.sqrt(12 * n));
+    const upperLimit = 0.5 + CONFIG.z_alpha_2 * (1 / Math.sqrt(12 * n));
+    
+    return {
+        name: "Prueba de Uniformidad - Media",
+        passes: mean >= lowerLimit && mean <= upperLimit,
+        details: {
+            mean: mean.toFixed(4),
+            lowerLimit: lowerLimit.toFixed(4),
+            upperLimit: upperLimit.toFixed(4)
+        }
+    };
+}
+
+function testUniformityVariance() {
+    const n = currentNumbers.length;
+    const mean = currentNumbers.reduce((sum, num) => sum + num.normalized, 0) / n;
+    const variance = currentNumbers.reduce((sum, num) => sum + Math.pow(num.normalized - mean, 2), 0) / (n - 1);
+    const lowerLimit = (1 / 12) - CONFIG.z_alpha_2 * Math.sqrt(1 / (180 * n));
+    const upperLimit = (1 / 12) + CONFIG.z_alpha_2 * Math.sqrt(1 / (180 * n));
+    
+    return {
+        name: "Prueba de Uniformidad - Varianza",
+        passes: variance >= lowerLimit && variance <= upperLimit,
+        details: {
+            variance: variance.toFixed(4),
+            lowerLimit: lowerLimit.toFixed(4),
+            upperLimit: upperLimit.toFixed(4)
+        }
+    };
+}
+
+function testIndependence() {
+    const n = currentNumbers.length;
+    const data = currentNumbers.map(num => num.normalized);
+    
+    let sumXY = 0, sumX = 0, sumY = 0, sumX2 = 0, sumY2 = 0;
+    
+    for (let i = 0; i < n - 1; i++) {
+        const x = data[i], y = data[i + 1];
+        sumXY += x * y;
+        sumX += x;
+        sumY += y;
+        sumX2 += x * x;
+        sumY2 += y * y;
+    }
+    
+    const numerator = (n - 1) * sumXY - sumX * sumY;
+    const denominator = Math.sqrt(((n - 1) * sumX2 - sumX * sumX) * ((n - 1) * sumY2 - sumY * sumY));
+    const correlation = numerator / denominator;
+    
+    const lowerLimit = -CONFIG.z_alpha_2 / Math.sqrt(n);
+    const upperLimit = CONFIG.z_alpha_2 / Math.sqrt(n);
+    
+    return {
+        name: "Prueba de Independencia - Correlación",
+        passes: correlation >= lowerLimit && correlation <= upperLimit,
+        details: {
+            correlation: correlation.toFixed(4),
+            lowerLimit: lowerLimit.toFixed(4),
+            upperLimit: upperLimit.toFixed(4)
+        }
+    };
+}
+
+// Mostrar resultados de validación
+function displayValidationResults(tests) {
+    elements.validationSection.innerHTML = '<h2>Pruebas de Validación</h2>';
+    const testList = document.createElement('div');
+    testList.className = 'validation-list';
+    
+    tests.forEach(test => {
+        const testElement = document.createElement('div');
+        testElement.className = 'test-item-list';
+        const checkbox = test.passes ? '☑' : '☐';
+        
+        testElement.innerHTML = `
+            <div class="test-header">
+                <span class="checkbox">${checkbox}</span>
+                <strong>${test.name}</strong>
+            </div>
+            <div class="test-details-list">
+                <div>Valor calculado: ${Object.values(test.details)[0]}</div>
+                <div>Límite inferior: ${test.details.lowerLimit}</div>
+                <div>Límite superior: ${test.details.upperLimit}</div>
+                <div class="test-result ${test.passes ? 'result-pass' : 'result-fail'}">
+                    Resultado: ${test.passes ? '☑ APRUEBA' : '☐ NO APRUEBA'}
+                </div>
+            </div>
+        `;
+        testList.appendChild(testElement);
+    });
+    
+    elements.validationSection.appendChild(testList);
+    
+    const allPass = tests.every(test => test.passes);
+    const finalResult = document.createElement('div');
+    finalResult.className = `final-validation-result ${allPass ? 'all-pass' : 'some-fail'}`;
+    finalResult.innerHTML = `
+        <div class="final-checkbox">${allPass ? '☑' : '☐'}</div>
+        <div>Los números <strong>${allPass ? 'PASAN' : 'NO PASAN'}</strong> todas las pruebas</div>
+    `;
+    elements.validationSection.appendChild(finalResult);
+    
+    elements.regenerateBtn.style.display = allPass ? 'none' : 'inline-block';
+    showMessage(`Se generaron ${currentNumbers.length} números - ${allPass ? 'VÁLIDOS' : 'NO VÁLIDOS'}`, allPass ? 'success' : 'error');
 }
 
 // Manejar generación
 function handleGenerate() {
-    utils.clearAllErrors();
-    
-    if (!validateInputs()) return;
-    
     const seed = parseInt(elements.seed.value);
     const multiplier = parseInt(elements.multiplier.value);
     const increment = parseInt(elements.increment.value);
     const modulus = parseInt(elements.modulus.value);
     const count = parseInt(elements.count.value);
     
-    if (seed < 0) {
-        utils.showIndividualError(elements.seed, 'La semilla debe ser un número ≥ 0');
+    if (!seed && seed !== 0 || !multiplier || !increment || !modulus || !count) {
+        showMessage('Todos los campos son requeridos', 'error');
         return;
     }
     
     if (count < 100) {
-        utils.showIndividualError(elements.count, 'La cantidad mínima de números a generar es 100');
+        showMessage('La cantidad mínima es 100 números', 'error');
         return;
     }
     
     count > 100 ? showConfirmationModal() : generateNumbers(seed, multiplier, increment, modulus, count);
-}
-
-// Validar entradas
-function validateInputs() {
-    let isValid = true;
-    
-    Object.values(elements).forEach(element => {
-        if (element && element.tagName === 'INPUT' && element.value === '') {
-            utils.showIndividualError(element, 'Este campo es requerido');
-            isValid = false;
-        }
-    });
-    
-    return isValid;
 }
 
 // Modal de confirmación
@@ -224,46 +311,27 @@ function confirmGeneration() {
 
 function cancelGeneration() {
     elements.confirmationModal.style.display = 'none';
-    utils.showMessage('Generación cancelada', 'error');
+    showMessage('Generación cancelada', 'error');
 }
 
-// Generar números
-function generateNumbers(seed, multiplier, increment, modulus, count) {
-    currentNumbers = [];
-    let x = seed;
+// Regenerar números
+function handleRegenerate() {
+    if (currentNumbers.length === 0) return;
     
-    for (let i = 0; i < count; i++) {
-        x = (multiplier * x + increment) % modulus;
-        currentNumbers.push({
-            index: i + 1,
-            value: x,
-            normalized: x / (modulus - 1)
-        });
-    }
+    const modulus = parseInt(elements.modulus.value);
+    const count = parseInt(elements.count.value);
+    const baseValue = Date.now();
     
-    displayNumbers();
-    updateChart();
-    utils.showMessage(`Se generaron ${count} números aleatorios (módulo: ${modulus})`, 'success');
-}
-
-// Mostrar números
-function displayNumbers() {
-    elements.numbersContainer.innerHTML = '';
-    currentNumbers.forEach(num => {
-        const numberItem = document.createElement('div');
-        numberItem.className = 'number-item';
-        numberItem.textContent = num.normalized.toFixed(4);
-        elements.numbersContainer.appendChild(numberItem);
-    });
-}
-
-// Actualizar gráfico
-function updateChart() {
-    scatterChart.data.datasets[0].data = currentNumbers.map(num => ({
-        x: num.index,
-        y: num.normalized
-    }));
-    scatterChart.update();
+    const newSeed = (baseValue * 1) % modulus;
+    const newMultiplier = (baseValue * 3) % (modulus - 1) + 1;
+    const newIncrement = (baseValue * 7) % (modulus - 1) + 1;
+    
+    elements.seed.value = newSeed;
+    elements.multiplier.value = newMultiplier;
+    elements.increment.value = newIncrement;
+    
+    generateNumbers(newSeed, newMultiplier, newIncrement, modulus, count);
+    showMessage('Nuevos parámetros generados', 'info');
 }
 
 // Reiniciar
@@ -272,10 +340,13 @@ function handleReset() {
         if (element && element.tagName === 'INPUT') element.value = '';
     });
     
-    utils.clearAllErrors();
     currentNumbers = [];
     elements.numbersContainer.innerHTML = '';
+    elements.validationSection.innerHTML = '';
     scatterChart.data.datasets[0].data = [];
     scatterChart.update();
+    correlationChart.data.datasets[0].data = [];
+    correlationChart.update();
     elements.messageDiv.textContent = '';
+    elements.regenerateBtn.style.display = 'none';
 }

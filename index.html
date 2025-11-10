@@ -41,6 +41,7 @@
             <div class="form-group">
                 <button id="generateBtn">Generar Números</button>
                 <button id="resetBtn" class="reset">Reiniciar</button>
+                <button id="regenerateBtn" class="regenerate" style="display: none;">Regenerar Números</button>
             </div>
             
             <div id="message"></div>
@@ -48,18 +49,23 @@
         
         <div class="results-section">
             <h2>Números Generados</h2>
-            <div class="numbers-container" id="numbersContainer">
-                <!-- Los números generados aparecerán aquí -->
-            </div>
+            <div class="numbers-container" id="numbersContainer"></div>
+            
+            <h2>Pruebas de Validación</h2>
+            <div class="validation-section" id="validationSection"></div>
             
             <h2>Gráfico de Dispersión</h2>
             <div class="chart-container">
                 <canvas id="scatterChart"></canvas>
             </div>
+
+            <h2>Gráfico de Correlación</h2>
+            <div class="correlation-chart-container">
+                <canvas id="correlationChart"></canvas>
+            </div>
         </div>
     </div>
     
-    <!-- Modal de confirmación para más de 100 números -->
     <div class="modal" id="confirmationModal">
         <div class="modal-content">
             <h2>Confirmación</h2>
