@@ -19,12 +19,20 @@ const elements = {
 // Variables globales
 let currentNumbers = [];
 let scatterChart = null;
-let correlationChart = null;
 
 // Configuración
 const CONFIG = {
     alpha: 0.05,
     z_alpha_2: 1.96
+};
+
+// Tabla Chi-cuadrado para α = 0.05
+const CHI_SQUARE_TABLE = {
+    1: 3.8415, 2: 5.9915, 3: 7.8147, 4: 9.4877, 5: 11.0705,
+    6: 12.5916, 7: 14.0671, 8: 15.5073, 9: 16.9190, 10: 18.3070,
+    11: 19.6751, 12: 21.0261, 13: 22.3620, 14: 23.6848, 15: 24.9958,
+    16: 26.2962, 17: 27.5871, 18: 28.8693, 19: 30.1435, 20: 31.4104,
+    25: 37.6525, 30: 43.7730, 35: 49.8018, 40: 55.7585, 45: 61.6562, 50: 67.5048
 };
 
 // Inicialización
@@ -61,24 +69,6 @@ function initializeCharts() {
             scales: {
                 x: { title: { display: true, text: 'Índice' }, min: 0 },
                 y: { title: { display: true, text: 'Valor Normalizado' }, min: 0, max: 1 }
-            }
-        }
-    });
-
-    correlationChart = new Chart(document.getElementById('correlationChart'), {
-        type: 'scatter',
-        data: { datasets: [{
-            label: 'Correlación',
-            data: [],
-            backgroundColor: 'rgba(33, 150, 243, 0.7)',
-            pointRadius: 4
-        }]},
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { title: { display: true, text: 'X_i' }, min: 0, max: 1 },
-                y: { title: { display: true, text: 'X_{i+1}' }, min: 0, max: 1 }
             }
         }
     });
@@ -139,16 +129,6 @@ function updateCharts() {
         y: num.normalized
     }));
     scatterChart.update();
-
-    const correlationData = [];
-    for (let i = 0; i < currentNumbers.length - 1; i++) {
-        correlationData.push({
-            x: currentNumbers[i].normalized,
-            y: currentNumbers[i + 1].normalized
-        });
-    }
-    correlationChart.data.datasets[0].data = correlationData;
-    correlationChart.update();
 }
 
 // Pruebas de validación
@@ -156,7 +136,8 @@ function runValidationTests() {
     const tests = [
         testUniformityMean(),
         testUniformityVariance(),
-        testIndependence()
+        testUniformityChiSquare(),
+        testRunsUpDown()
     ];
     
     displayValidationResults(tests);
@@ -172,9 +153,10 @@ function testUniformityMean() {
         name: "Prueba de Uniformidad - Media",
         passes: mean >= lowerLimit && mean <= upperLimit,
         details: {
-            mean: mean.toFixed(4),
-            lowerLimit: lowerLimit.toFixed(4),
-            upperLimit: upperLimit.toFixed(4)
+            mean: mean.toFixed(6),
+            lowerLimit: lowerLimit.toFixed(6),
+            upperLimit: upperLimit.toFixed(6),
+            expected: "0.500000"
         }
     };
 }
@@ -190,42 +172,94 @@ function testUniformityVariance() {
         name: "Prueba de Uniformidad - Varianza",
         passes: variance >= lowerLimit && variance <= upperLimit,
         details: {
-            variance: variance.toFixed(4),
-            lowerLimit: lowerLimit.toFixed(4),
-            upperLimit: upperLimit.toFixed(4)
+            variance: variance.toFixed(6),
+            lowerLimit: lowerLimit.toFixed(6),
+            upperLimit: upperLimit.toFixed(6),
+            expected: (1/12).toFixed(6)
         }
     };
 }
 
-function testIndependence() {
+function testUniformityChiSquare() {
     const n = currentNumbers.length;
     const data = currentNumbers.map(num => num.normalized);
     
-    let sumXY = 0, sumX = 0, sumY = 0, sumX2 = 0, sumY2 = 0;
+    // Calcular número de intervalos (m = √n)
+    const m = Math.floor(Math.sqrt(n));
+    const intervalSize = 1 / m;
     
-    for (let i = 0; i < n - 1; i++) {
-        const x = data[i], y = data[i + 1];
-        sumXY += x * y;
-        sumX += x;
-        sumY += y;
-        sumX2 += x * x;
-        sumY2 += y * y;
+    // Frecuencias observadas
+    const observed = new Array(m).fill(0);
+    data.forEach(value => {
+        const index = Math.min(Math.floor(value / intervalSize), m - 1);
+        observed[index]++;
+    });
+    
+    // Frecuencia esperada
+    const expected = n / m;
+    
+    // Calcular estadístico Chi-cuadrado
+    let chiSquared = 0;
+    for (let i = 0; i < m; i++) {
+        chiSquared += Math.pow(observed[i] - expected, 2) / expected;
     }
     
-    const numerator = (n - 1) * sumXY - sumX * sumY;
-    const denominator = Math.sqrt(((n - 1) * sumX2 - sumX * sumX) * ((n - 1) * sumY2 - sumY * sumY));
-    const correlation = numerator / denominator;
+    // Obtener valor crítico (grados de libertad = m - 1)
+    const degreesOfFreedom = m - 1;
+    const criticalValue = CHI_SQUARE_TABLE[degreesOfFreedom] || (degreesOfFreedom + Math.sqrt(2 * degreesOfFreedom) * 1.645);
     
-    const lowerLimit = -CONFIG.z_alpha_2 / Math.sqrt(n);
-    const upperLimit = CONFIG.z_alpha_2 / Math.sqrt(n);
+    // La prueba pasa si chiSquared < criticalValue
+    const passes = chiSquared < criticalValue;
     
     return {
-        name: "Prueba de Independencia - Correlación",
-        passes: correlation >= lowerLimit && correlation <= upperLimit,
+        name: "Prueba de Uniformidad - Chi Cuadrado",
+        passes: passes,
         details: {
-            correlation: correlation.toFixed(4),
-            lowerLimit: lowerLimit.toFixed(4),
-            upperLimit: upperLimit.toFixed(4)
+            chiSquared: chiSquared.toFixed(4),
+            criticalValue: criticalValue.toFixed(4),
+            intervals: m,
+            degreesOfFreedom: degreesOfFreedom
+        }
+    };
+}
+
+function testRunsUpDown() {
+    const n = currentNumbers.length;
+    const data = currentNumbers.map(num => num.normalized);
+    
+    // Generar secuencia de corridas (1 = sube, 0 = baja)
+    const runs = [];
+    for (let i = 1; i < n; i++) {
+        runs.push(data[i] > data[i - 1] ? 1 : 0);
+    }
+    
+    // Contar corridas observadas
+    let observedRuns = 1;
+    for (let i = 1; i < runs.length; i++) {
+        if (runs[i] !== runs[i - 1]) {
+            observedRuns++;
+        }
+    }
+    
+    // Calcular parámetros estadísticos
+    const expectedRuns = (2 * n - 1) / 3;
+    const varianceRuns = (16 * n - 29) / 90;
+    const stdDevRuns = Math.sqrt(varianceRuns);
+    
+    // Calcular estadístico Z0
+    const Z0 = (observedRuns - expectedRuns) / stdDevRuns;
+    
+    // La prueba pasa si |Z0| ≤ 1.96
+    const passes = Math.abs(Z0) <= 1.96;
+    
+    return {
+        name: "Prueba de Independencia - Corridas Arriba/Abajo",
+        passes: passes,
+        details: {
+            Z0: Math.abs(Z0).toFixed(4),
+            criticalValue: "1.9600",
+            observedRuns: observedRuns,
+            expectedRuns: expectedRuns.toFixed(2)
         }
     };
 }
@@ -239,19 +273,41 @@ function displayValidationResults(tests) {
     tests.forEach(test => {
         const testElement = document.createElement('div');
         testElement.className = 'test-item-list';
-        const checkbox = test.passes ? '☑' : '☐';
+        const status = test.passes ? 'APRUEBA' : 'NO APRUEBA';
+        
+        let detailsHTML = '';
+        
+        if (test.name === "Prueba de Uniformidad - Chi Cuadrado") {
+            detailsHTML = `
+                <div class="test-description">La prueba verifica la uniformidad (que los números estén repartidos equitativamente en los intervalos). Para que la hipótesis de uniformidad se mantenga, el estadístico de prueba calculado debe ser inferior al valor crítico.</div>
+                <div><strong>Chi calculado:</strong> ${test.details.chiSquared}</div>
+                <div><strong>Límite crítico:</strong> ${test.details.criticalValue}</div>
+                <div><strong>Intervalos:</strong> ${test.details.intervals}</div>
+            `;
+        } else if (test.name === "Prueba de Independencia - Corridas Arriba/Abajo") {
+            detailsHTML = `
+                <div class="test-description">La prueba funciona si el resultado de la verificación (llamado estadístico Z0) cae dentro de los límites que la prueba considera normales o aceptables. Si queda dentro de ese rango, concluimos que la secuencia sí es aleatoria.</div>
+                <div><strong>Zo calculado:</strong> ${test.details.Z0}</div>
+                <div><strong>Límite crítico:</strong> ${test.details.criticalValue}</div>
+                <div><strong>Corridas observadas:</strong> ${test.details.observedRuns}</div>
+            `;
+        } else {
+            detailsHTML = `
+                <div><strong>Valor calculado:</strong> ${Object.values(test.details)[0]}</div>
+                <div><strong>Límite inferior:</strong> ${test.details.lowerLimit}</div>
+                <div><strong>Límite superior:</strong> ${test.details.upperLimit}</div>
+            `;
+        }
         
         testElement.innerHTML = `
             <div class="test-header">
-                <span class="checkbox">${checkbox}</span>
+                <span class="checkbox">${test.passes ? '✓' : '✗'}</span>
                 <strong>${test.name}</strong>
             </div>
             <div class="test-details-list">
-                <div>Valor calculado: ${Object.values(test.details)[0]}</div>
-                <div>Límite inferior: ${test.details.lowerLimit}</div>
-                <div>Límite superior: ${test.details.upperLimit}</div>
+                ${detailsHTML}
                 <div class="test-result ${test.passes ? 'result-pass' : 'result-fail'}">
-                    Resultado: ${test.passes ? '☑ APRUEBA' : '☐ NO APRUEBA'}
+                    Resultado: ${status}
                 </div>
             </div>
         `;
@@ -264,7 +320,7 @@ function displayValidationResults(tests) {
     const finalResult = document.createElement('div');
     finalResult.className = `final-validation-result ${allPass ? 'all-pass' : 'some-fail'}`;
     finalResult.innerHTML = `
-        <div class="final-checkbox">${allPass ? '☑' : '☐'}</div>
+        <div class="final-checkbox">${allPass ? '✓' : '✗'}</div>
         <div>Los números <strong>${allPass ? 'PASAN' : 'NO PASAN'}</strong> todas las pruebas</div>
     `;
     elements.validationSection.appendChild(finalResult);
@@ -336,17 +392,23 @@ function handleRegenerate() {
 
 // Reiniciar
 function handleReset() {
-    Object.values(elements).forEach(element => {
-        if (element && element.tagName === 'INPUT') element.value = '';
-    });
+    elements.seed.value = '';
+    elements.multiplier.value = '';
+    elements.increment.value = '';
+    elements.modulus.value = '';
+    elements.count.value = '';
     
     currentNumbers = [];
     elements.numbersContainer.innerHTML = '';
     elements.validationSection.innerHTML = '';
-    scatterChart.data.datasets[0].data = [];
-    scatterChart.update();
-    correlationChart.data.datasets[0].data = [];
-    correlationChart.update();
+    
+    if (scatterChart) {
+        scatterChart.data.datasets[0].data = [];
+        scatterChart.update();
+    }
+    
     elements.messageDiv.textContent = '';
     elements.regenerateBtn.style.display = 'none';
+    
+    showMessage('Sistema reiniciado', 'info');
 }
